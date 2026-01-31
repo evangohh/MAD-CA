@@ -21,44 +21,87 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import kotlin.OptIn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlin.OptIn
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GameScreen(navController: NavController) {
+    val gameDurationSeconds = 30
+
     // Core state
     var score by remember { mutableIntStateOf(0) }
-    var timeLeft by remember { mutableIntStateOf(30) }   // change to 60 if you want
-    var moleIndex by remember { mutableIntStateOf(0) }   // 0..8
+    var timeLeft by remember { mutableIntStateOf(gameDurationSeconds) }
+    var moleIndex by remember { mutableIntStateOf(0) } // 0..8
     var isRunning by remember { mutableStateOf(false) }
     var showGameOver by remember { mutableStateOf(false) }
+
+    // Used to force restart of LaunchedEffect loops even if isRunning stays true
+    var gameId by remember { mutableIntStateOf(0) }
 
     // High score
     val context = LocalContext.current
     val prefs = remember { HighScorePrefs(context) }
     var highScore by remember { mutableIntStateOf(prefs.getHighScore()) }
 
+    fun endGame() {
+        isRunning = false
+        showGameOver = true
+
+        if (score > highScore) {
+            highScore = score
+            prefs.setHighScore(score)
+        }
+    }
+
     fun startOrRestart() {
         score = 0
-        timeLeft = 30
+        timeLeft = gameDurationSeconds
         moleIndex = Random.nextInt(9)
         showGameOver = false
         isRunning = true
+        gameId += 1
     }
 
     fun onHoleClick(index: Int) {
-        if (isRunning && index == moleIndex) {
+        if (isRunning && timeLeft > 0 && index == moleIndex) {
             score += 1
+        }
+    }
+
+    // Timer loop (every 1 second)
+    LaunchedEffect(isRunning, gameId) {
+        if (!isRunning) return@LaunchedEffect
+
+        while (isRunning && timeLeft > 0) {
+            delay(1000)
+            timeLeft -= 1
+        }
+
+        if (isRunning && timeLeft <= 0) {
+            endGame()
+        }
+    }
+
+    // Mole movement loop (every 700–1000ms)
+    LaunchedEffect(isRunning, gameId) {
+        if (!isRunning) return@LaunchedEffect
+
+        while (isRunning && timeLeft > 0) {
+            val interval = Random.nextLong(700, 1001) // 700..1000 inclusive
+            delay(interval)
+            moleIndex = Random.nextInt(9)
         }
     }
 
@@ -93,7 +136,7 @@ fun GameScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-            // 3x3 grid UI (mole displayed in exactly one spot)
+            // 3x3 grid (exactly one mole at any time)
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 modifier = Modifier.fillMaxWidth(),
@@ -104,7 +147,8 @@ fun GameScreen(navController: NavController) {
                     val isMole = index == moleIndex
                     Button(
                         onClick = { onHoleClick(index) },
-                        modifier = Modifier.height(90.dp)
+                        modifier = Modifier.height(90.dp),
+                        enabled = isRunning && timeLeft > 0
                     ) {
                         Text(if (isMole) "🐹" else "")
                     }
@@ -121,7 +165,6 @@ fun GameScreen(navController: NavController) {
                 Spacer(Modifier.height(12.dp))
                 Text("Game Over! Final score: $score")
             }
-
         }
     }
 }
