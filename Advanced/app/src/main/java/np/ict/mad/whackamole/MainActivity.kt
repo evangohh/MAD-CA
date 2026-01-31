@@ -85,6 +85,14 @@ fun GreetingPreview() {
             SettingsScreen(navController)
         }
 
+        composable("game") {
+            GameScreenAdvanced(navController = navController, db = db, currentUser = currentUser)
+        }
+        composable("leaderboard") {
+            LeaderboardScreen(navController = navController, db = db, currentUser = currentUser)
+        }
+
+
     }
 
 }
